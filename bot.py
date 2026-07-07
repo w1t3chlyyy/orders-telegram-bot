@@ -18,11 +18,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardMarkup
+    ReplyKeyboardMarkup, ParseMode
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 
 # ======================================================================
@@ -1901,10 +1899,7 @@ async def handle_separator_executor(callback: CallbackQuery):
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    bot = Bot(
-        token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-    )
+   bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
     
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(common_router)
