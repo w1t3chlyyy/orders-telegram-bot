@@ -1894,11 +1894,35 @@ async def handle_separator_executor(callback: CallbackQuery):
     await callback.answer("Это заголовок раздела")
 
 # ======================================================================
-# 12. ЗАПУСК
+# 12. HTTP-СЕРВЕР ДЛЯ RENDER
+# ======================================================================
+
+import threading
+import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_http_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"✅ HTTP сервер запущен на порту {port}")
+    server.serve_forever()
+
+# ======================================================================
+# 13. ЗАПУСК
 # ======================================================================
 
 async def main():
     logging.basicConfig(level=logging.INFO)
+    
+    # Запускаем HTTP-сервер в фоновом потоке
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
     
     bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
     
