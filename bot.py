@@ -1899,7 +1899,7 @@ async def handle_separator_executor(callback: CallbackQuery):
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-   bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+    bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
     
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(common_router)
