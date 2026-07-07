@@ -1,0 +1,31 @@
+<<<<<<< HEAD
+services:
+  - type: web
+    name: sales-team-bot
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_ID
+        sync: false
+      - key: DB_PATH
+        value: bot.db
+    healthCheckPath: /health
+=======
+services:
+  - type: web
+    name: sales-team-bot
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_ID
+        sync: false
+      - key: DB_PATH
+        value: bot.db
+    healthCheckPath: /health
+>>>>>>> 3bcd9705ab79c2d098cb6f0bf7f25acd3a603f67
