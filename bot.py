@@ -1919,8 +1919,8 @@ async def submit_order_process(message: Message, state: FSMContext):
         db.submit_order(order_id)
         await state.clear()
         
-    except Exception as e:
-        logging.error(f"Ошибка отправки: {e}")
+    except Exception as ex:
+        logging.error(f"Ошибка отправки: {ex}")
         await message.answer(f"❌ Ошибка при отправке. Попробуйте еще раз.")
 
 
