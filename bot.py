@@ -53,6 +53,7 @@ class AdminStates(StatesGroup):
     waiting_for_service_price = State()
     waiting_for_revise_comment = State()
     waiting_for_executor_name = State()
+    waiting_for_content = State()
 
 # ======================================================================
 # 3. БАЗА ДАННЫХ
@@ -1805,6 +1806,8 @@ async def history_orders(message: Message, state: FSMContext):
 
 # ---------- ДЕЙСТВИЯ ИСПОЛНИТЕЛЯ ----------
 
+# ---------- ДЕЙСТВИЯ ИСПОЛНИТЕЛЯ ----------
+
 @executor_router.callback_query(F.data.startswith("take_order_"))
 async def take_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[2])
@@ -1833,8 +1836,9 @@ async def take_order(callback: CallbackQuery):
     else:
         await callback.answer("❌ Не удалось взять заказ!", show_alert=True)
 
+
 @executor_router.callback_query(F.data.startswith("submit_order_"))
-async def submit_order(callback: CallbackQuery):
+async def submit_order_start(callback: CallbackQuery, state: FSMContext):
     order_id = int(callback.data.split("_")[2])
     executor = db.get_executor_by_telegram_id(callback.from_user.id)
     order = db.get_order(order_id)
@@ -1847,17 +1851,67 @@ async def submit_order(callback: CallbackQuery):
         await callback.answer("Заказ не в работе!", show_alert=True)
         return
     
-    db.submit_order(order_id)
+    await state.update_data(order_id=order_id)
+    await state.set_state(AdminStates.waiting_for_content)
     
-    await callback.message.edit_text(
-        callback.message.text + "\n\n📤 Работа отправлена на проверку!"
+    await callback.message.answer(
+        "📤 <b>Сдача работы</b>\n\n"
+        "Отправьте результат работы:\n"
+        "• 📷 Фото\n"
+        "• 📄 Документ\n"
+        "• 🎬 Видео\n"
+        "• 📝 Текст\n\n"
+        "Или отправьте /cancel для отмены"
     )
-    await callback.answer("✅ Работа отправлена!")
+    await callback.answer()
+
+
+@executor_router.message(AdminStates.waiting_for_content)
+async def submit_order_process(message: Message, state: FSMContext):
+    data = await state.get_data()
+    order_id = data['order_id']
+    executor = db.get_executor_by_telegram_id(message.from_user.id)
+    order = db.get_order(order_id)
     
-    await callback.bot.send_message(
-        ADMIN_ID,
-        f"📥 Исполнитель {e(executor['full_name'])} сдал работу по заказу #{order_id}"
-    )
+    if not executor or not order or order['executor_id'] != executor['id']:
+        await state.clear()
+        await message.answer("⚠️ Заказ недоступен.")
+        return
+    
+    if order['status'] != 'in_progress':
+        await state.clear()
+        await message.answer("⚠️ Заказ не в работе.")
+        return
+    
+    caption = f"📥 <b>Новая работа по заказу #{order_id}</b>\n\n"
+    caption += f"👤 Исполнитель: {e(executor['full_name'])}\n"
+    caption += f"📝 Заказ: {e(order['description'][:100])}"
+    
+    kb = order_admin_review_kb(order_id)
+    
+    try:
+        if message.photo:
+            await message.bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption, reply_markup=kb)
+        elif message.document:
+            await message.bot.send_document(ADMIN_ID, message.document.file_id, caption=caption, reply_markup=kb)
+        elif message.video:
+            await message.bot.send_video(ADMIN_ID, message.video.file_id, caption=caption, reply_markup=kb)
+        elif message.audio:
+            await message.bot.send_audio(ADMIN_ID, message.audio.file_id, caption=caption, reply_markup=kb)
+        elif message.text:
+            await message.bot.send_message(ADMIN_ID, f"{caption}\n\n📝 Текст: {message.text}", reply_markup=kb)
+        else:
+            await message.forward(ADMIN_ID)
+            await message.bot.send_message(ADMIN_ID, caption, reply_markup=kb)
+        
+        db.submit_order(order_id)
+        await state.clear()
+        await message.answer(f"✅ Работа по заказу #{order_id} отправлена на проверку!")
+        
+    except Exception as e:
+        logging.error(f"Ошибка: {e}")
+        await message.answer("❌ Ошибка при отправке. Попробуйте еще раз.")
+
 
 @executor_router.callback_query(F.data.startswith("decline_order_"))
 async def decline_order(callback: CallbackQuery):
@@ -1880,7 +1934,7 @@ async def decline_order(callback: CallbackQuery):
         ADMIN_ID,
         f"🚫 Исполнитель {e(executor['full_name'])} отказался от заказа #{order_id}"
     )
-
+    
 # ======================================================================
 # 11. ОБРАБОТКА SEPARATOR
 # ======================================================================
