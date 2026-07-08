@@ -1866,7 +1866,7 @@ async def submit_order_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@executor_router.message(AdminStates.waiting_for_content)
+@executor_router.message(AdminStates.waiting_for_content, F.photo | F.document | F.video | F.audio | F.text)
 async def submit_order_process(message: Message, state: FSMContext):
     data = await state.get_data()
     order_id = data['order_id']
@@ -1911,29 +1911,6 @@ async def submit_order_process(message: Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Ошибка: {e}")
         await message.answer("❌ Ошибка при отправке. Попробуйте еще раз.")
-
-
-@executor_router.callback_query(F.data.startswith("decline_order_"))
-async def decline_order(callback: CallbackQuery):
-    order_id = int(callback.data.split("_")[2])
-    executor = db.get_executor_by_telegram_id(callback.from_user.id)
-    order = db.get_order(order_id)
-    
-    if not executor or not order or order['executor_id'] != executor['id']:
-        await callback.answer("Это не ваш заказ!", show_alert=True)
-        return
-    
-    db.unassign_order(order_id)
-    
-    await callback.message.edit_text(
-        callback.message.text + "\n\n🚫 Вы отказались от заказа."
-    )
-    await callback.answer("❌ Отказ принят!")
-    
-    await callback.bot.send_message(
-        ADMIN_ID,
-        f"🚫 Исполнитель {e(executor['full_name'])} отказался от заказа #{order_id}"
-    )
     
 # ======================================================================
 # 11. ОБРАБОТКА SEPARATOR
