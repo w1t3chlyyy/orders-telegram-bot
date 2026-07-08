@@ -1806,8 +1806,6 @@ async def history_orders(message: Message, state: FSMContext):
 
 # ---------- ДЕЙСТВИЯ ИСПОЛНИТЕЛЯ ----------
 
-# ---------- ДЕЙСТВИЯ ИСПОЛНИТЕЛЯ ----------
-
 @executor_router.callback_query(F.data.startswith("take_order_"))
 async def take_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[2])
@@ -1866,10 +1864,16 @@ async def submit_order_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@executor_router.message(AdminStates.waiting_for_content, F.photo | F.document | F.video | F.audio | F.text)
+@executor_router.message(AdminStates.waiting_for_content)
 async def submit_order_process(message: Message, state: FSMContext):
     data = await state.get_data()
-    order_id = data['order_id']
+    order_id = data.get('order_id')
+    
+    if not order_id:
+        await state.clear()
+        await message.answer("⚠️ Ошибка: заказ не найден. Попробуйте снова.")
+        return
+    
     executor = db.get_executor_by_telegram_id(message.from_user.id)
     order = db.get_order(order_id)
     
@@ -1883,6 +1887,7 @@ async def submit_order_process(message: Message, state: FSMContext):
         await message.answer("⚠️ Заказ не в работе.")
         return
     
+    # Отправляем админу
     caption = f"📥 <b>Новая работа по заказу #{order_id}</b>\n\n"
     caption += f"👤 Исполнитель: {e(executor['full_name'])}\n"
     caption += f"📝 Заказ: {e(order['description'][:100])}"
@@ -1892,25 +1897,54 @@ async def submit_order_process(message: Message, state: FSMContext):
     try:
         if message.photo:
             await message.bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption, reply_markup=kb)
+            await message.answer(f"✅ Фото по заказу #{order_id} отправлено на проверку!")
         elif message.document:
             await message.bot.send_document(ADMIN_ID, message.document.file_id, caption=caption, reply_markup=kb)
+            await message.answer(f"✅ Документ по заказу #{order_id} отправлен на проверку!")
         elif message.video:
             await message.bot.send_video(ADMIN_ID, message.video.file_id, caption=caption, reply_markup=kb)
+            await message.answer(f"✅ Видео по заказу #{order_id} отправлено на проверку!")
         elif message.audio:
             await message.bot.send_audio(ADMIN_ID, message.audio.file_id, caption=caption, reply_markup=kb)
+            await message.answer(f"✅ Аудио по заказу #{order_id} отправлено на проверку!")
         elif message.text:
             await message.bot.send_message(ADMIN_ID, f"{caption}\n\n📝 Текст: {message.text}", reply_markup=kb)
+            await message.answer(f"✅ Текст по заказу #{order_id} отправлен на проверку!")
         else:
             await message.forward(ADMIN_ID)
             await message.bot.send_message(ADMIN_ID, caption, reply_markup=kb)
+            await message.answer(f"✅ Работа по заказу #{order_id} отправлена на проверку!")
         
+        # Меняем статус заказа
         db.submit_order(order_id)
         await state.clear()
-        await message.answer(f"✅ Работа по заказу #{order_id} отправлена на проверку!")
         
     except Exception as e:
-        logging.error(f"Ошибка: {e}")
-        await message.answer("❌ Ошибка при отправке. Попробуйте еще раз.")
+        logging.error(f"Ошибка отправки: {e}")
+        await message.answer(f"❌ Ошибка при отправке. Попробуйте еще раз.")
+
+
+@executor_router.callback_query(F.data.startswith("decline_order_"))
+async def decline_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[2])
+    executor = db.get_executor_by_telegram_id(callback.from_user.id)
+    order = db.get_order(order_id)
+    
+    if not executor or not order or order['executor_id'] != executor['id']:
+        await callback.answer("Это не ваш заказ!", show_alert=True)
+        return
+    
+    db.unassign_order(order_id)
+    
+    await callback.message.edit_text(
+        callback.message.text + "\n\n🚫 Вы отказались от заказа."
+    )
+    await callback.answer("❌ Отказ принят!")
+    
+    await callback.bot.send_message(
+        ADMIN_ID,
+        f"🚫 Исполнитель {e(executor['full_name'])} отказался от заказа #{order_id}"
+    )
     
 # ======================================================================
 # 11. ОБРАБОТКА SEPARATOR
